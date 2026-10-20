@@ -1,0 +1,175 @@
+// Контракт gRPC-взаимодействия клиента и сервера GophKeeper.
+//
+// Все пользовательские данные шифруются на клиенте: сервер хранит и
+// передаёт только шифротекст (поле encrypted_payload) и служебные поля,
+// необходимые для синхронизации (идентификатор, тип, версия, признак удаления).
+syntax = "proto3";
+
+package gophkeeper.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/e-l-l-a-r/gophkeeper/internal/proto;proto";
+
+// SecretType определяет тип хранимой записи. Тип передаётся открыто, чтобы
+// клиент мог фильтровать записи, не расшифровывая их.
+enum SecretType {
+  // SECRET_TYPE_UNSPECIFIED - тип не задан; сервер отклоняет такие записи.
+  SECRET_TYPE_UNSPECIFIED = 0;
+  // SECRET_TYPE_LOGIN_PASSWORD - пара логин/пароль.
+  SECRET_TYPE_LOGIN_PASSWORD = 1;
+  // SECRET_TYPE_TEXT - произвольные текстовые данные.
+  SECRET_TYPE_TEXT = 2;
+  // SECRET_TYPE_BINARY - произвольные бинарные данные.
+  SECRET_TYPE_BINARY = 3;
+  // SECRET_TYPE_CARD - данные банковской карты.
+  SECRET_TYPE_CARD = 4;
+}
+
+// AuthService - регистрация и аутентификация пользователей. Методы сервиса
+// не требуют токена доступа.
+service AuthService {
+  // Register регистрирует нового пользователя и сразу выдаёт токен доступа.
+  // Возвращает ALREADY_EXISTS, если логин занят, и INVALID_ARGUMENT, если
+  // логин или пароль не прошли проверку.
+  rpc Register(RegisterRequest) returns (AuthResponse);
+
+  // Login проверяет учётные данные и выдаёт токен доступа. Возвращает
+  // UNAUTHENTICATED при неверном логине или пароле.
+  rpc Login(LoginRequest) returns (AuthResponse);
+}
+
+// SecretsService - хранение и синхронизация записей пользователя. Все методы
+// требуют токена доступа в метаданных запроса (authorization: Bearer <token>)
+// и работают только с записями владельца токена.
+service SecretsService {
+  // Create создаёт запись. Идентификатор задаёт клиент, что позволяет создавать
+  // записи без связи с сервером. Возвращает ALREADY_EXISTS, если запись с таким
+  // идентификатором уже есть (в том числе удалённая).
+  rpc Create(CreateSecretRequest) returns (Secret);
+
+  // Get возвращает запись по идентификатору. Возвращает NOT_FOUND, если записи
+  // нет или она удалена.
+  rpc Get(GetSecretRequest) returns (Secret);
+
+  // Update заменяет содержимое записи. Если expected_version не совпадает с
+  // текущей версией записи на сервере, возвращает ABORTED: клиент должен
+  // выполнить синхронизацию и разрешить конфликт.
+  rpc Update(UpdateSecretRequest) returns (Secret);
+
+  // Delete помечает запись удалённой. Запись остаётся на сервере как
+  // «надгробие», чтобы другие клиенты узнали об удалении при синхронизации.
+  // Возвращает ABORTED при несовпадении expected_version.
+  rpc Delete(DeleteSecretRequest) returns (google.protobuf.Empty);
+
+  // Sync возвращает разницу между состоянием клиента и сервера (дельту).
+  // Клиент передаёт идентификаторы и версии известных ему записей, сервер
+  // возвращает записи, которые новее или неизвестны клиенту, и идентификаторы
+  // записей, удалённых на сервере.
+  rpc Sync(SyncRequest) returns (SyncResponse);
+}
+
+// RegisterRequest - запрос регистрации нового пользователя.
+message RegisterRequest {
+  // login - уникальный логин пользователя.
+  string login = 1;
+  // password - секрет аутентификации. Сервер хранит только его хеш с солью.
+  string password = 2;
+  // kdf_salt - соль, которую клиент использует для вывода ключа шифрования из
+  // мастер-пароля. Соль не секретна; сервер хранит её, чтобы отдавать другим
+  // клиентам владельца при входе.
+  bytes kdf_salt = 3;
+}
+
+// LoginRequest - запрос аутентификации существующего пользователя.
+message LoginRequest {
+  // login - логин пользователя.
+  string login = 1;
+  // password - секрет аутентификации.
+  string password = 2;
+}
+
+// AuthResponse - результат регистрации или входа.
+message AuthResponse {
+  // token - токен доступа для метаданных authorization: Bearer <token>.
+  string token = 1;
+  // expires_at - момент истечения токена.
+  google.protobuf.Timestamp expires_at = 2;
+  // kdf_salt - соль вывода ключа шифрования, заданная при регистрации.
+  bytes kdf_salt = 3;
+}
+
+// Secret - зашифрованная запись пользователя.
+message Secret {
+  // id - идентификатор записи (UUID), заданный клиентом.
+  string id = 1;
+  // type - тип записи.
+  SecretType type = 2;
+  // encrypted_payload - шифротекст (nonce и данные AES-256-GCM), внутри
+  // которого находятся название, содержимое и метаинформация записи.
+  bytes encrypted_payload = 3;
+  // version - версия записи; растёт на единицу при каждом изменении.
+  int64 version = 4;
+  // updated_at - время последнего изменения на сервере.
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+// CreateSecretRequest - запрос создания записи.
+message CreateSecretRequest {
+  // id - идентификатор новой записи (UUID).
+  string id = 1;
+  // type - тип записи.
+  SecretType type = 2;
+  // encrypted_payload - шифротекст содержимого записи.
+  bytes encrypted_payload = 3;
+}
+
+// GetSecretRequest - запрос записи по идентификатору.
+message GetSecretRequest {
+  // id - идентификатор записи.
+  string id = 1;
+}
+
+// UpdateSecretRequest - запрос изменения записи.
+message UpdateSecretRequest {
+  // id - идентификатор записи.
+  string id = 1;
+  // type - новый тип записи.
+  SecretType type = 2;
+  // encrypted_payload - новый шифротекст содержимого записи.
+  bytes encrypted_payload = 3;
+  // expected_version - версия записи, на основе которой клиент вносил
+  // изменения; используется для оптимистичной блокировки.
+  int64 expected_version = 4;
+}
+
+// DeleteSecretRequest - запрос удаления записи.
+message DeleteSecretRequest {
+  // id - идентификатор записи.
+  string id = 1;
+  // expected_version - версия записи, которую клиент считает актуальной.
+  int64 expected_version = 2;
+}
+
+// SecretVersion - пара идентификатор/версия записи, известной клиенту.
+message SecretVersion {
+  // id - идентификатор записи.
+  string id = 1;
+  // version - версия записи на клиенте.
+  int64 version = 2;
+}
+
+// SyncRequest - запрос дельты синхронизации.
+message SyncRequest {
+  // known - все записи, о которых клиент знает, с их версиями.
+  repeated SecretVersion known = 1;
+}
+
+// SyncResponse - дельта синхронизации.
+message SyncResponse {
+  // changed - записи, которых нет у клиента или версия которых на сервере новее.
+  repeated Secret changed = 1;
+  // deleted_ids - идентификаторы известных клиенту записей, удалённых на сервере.
+  repeated string deleted_ids = 2;
+}

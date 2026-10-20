@@ -1,0 +1,506 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "gophkeeper.proto",
+    "version": "version not set"
+  },
+  "tags": [
+    {
+      "name": "AuthService",
+      "description": "AuthService - регистрация и аутентификация пользователей. Методы сервиса\nне требуют токена доступа."
+    },
+    {
+      "name": "SecretsService",
+      "description": "SecretsService - хранение и синхронизация записей пользователя. Все методы\nтребуют токена доступа в метаданных запроса (authorization: Bearer \u003ctoken\u003e)\nи работают только с записями владельца токена."
+    }
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/gophkeeper.v1.AuthService/Login": {
+      "post": {
+        "summary": "Login проверяет учётные данные и выдаёт токен доступа. Возвращает\nUNAUTHENTICATED при неверном логине или пароле.",
+        "operationId": "AuthService_Login",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AuthResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "LoginRequest - запрос аутентификации существующего пользователя.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1LoginRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AuthService"
+        ]
+      }
+    },
+    "/gophkeeper.v1.AuthService/Register": {
+      "post": {
+        "summary": "Register регистрирует нового пользователя и сразу выдаёт токен доступа.\nВозвращает ALREADY_EXISTS, если логин занят, и INVALID_ARGUMENT, если\nлогин или пароль не прошли проверку.",
+        "operationId": "AuthService_Register",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1AuthResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "RegisterRequest - запрос регистрации нового пользователя.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1RegisterRequest"
+            }
+          }
+        ],
+        "tags": [
+          "AuthService"
+        ]
+      }
+    },
+    "/gophkeeper.v1.SecretsService/Create": {
+      "post": {
+        "summary": "Create создаёт запись. Идентификатор задаёт клиент, что позволяет создавать\nзаписи без связи с сервером. Возвращает ALREADY_EXISTS, если запись с таким\nидентификатором уже есть (в том числе удалённая).",
+        "operationId": "SecretsService_Create",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Secret"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "CreateSecretRequest - запрос создания записи.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1CreateSecretRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SecretsService"
+        ]
+      }
+    },
+    "/gophkeeper.v1.SecretsService/Delete": {
+      "post": {
+        "summary": "Delete помечает запись удалённой. Запись остаётся на сервере как\n«надгробие», чтобы другие клиенты узнали об удалении при синхронизации.\nВозвращает ABORTED при несовпадении expected_version.",
+        "operationId": "SecretsService_Delete",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "DeleteSecretRequest - запрос удаления записи.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1DeleteSecretRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SecretsService"
+        ]
+      }
+    },
+    "/gophkeeper.v1.SecretsService/Get": {
+      "post": {
+        "summary": "Get возвращает запись по идентификатору. Возвращает NOT_FOUND, если записи\nнет или она удалена.",
+        "operationId": "SecretsService_Get",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Secret"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "GetSecretRequest - запрос записи по идентификатору.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1GetSecretRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SecretsService"
+        ]
+      }
+    },
+    "/gophkeeper.v1.SecretsService/Sync": {
+      "post": {
+        "summary": "Sync возвращает разницу между состоянием клиента и сервера (дельту).\nКлиент передаёт идентификаторы и версии известных ему записей, сервер\nвозвращает записи, которые новее или неизвестны клиенту, и идентификаторы\nзаписей, удалённых на сервере.",
+        "operationId": "SecretsService_Sync",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1SyncResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "SyncRequest - запрос дельты синхронизации.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1SyncRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SecretsService"
+        ]
+      }
+    },
+    "/gophkeeper.v1.SecretsService/Update": {
+      "post": {
+        "summary": "Update заменяет содержимое записи. Если expected_version не совпадает с\nтекущей версией записи на сервере, возвращает ABORTED: клиент должен\nвыполнить синхронизацию и разрешить конфликт.",
+        "operationId": "SecretsService_Update",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v1Secret"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/rpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "description": "UpdateSecretRequest - запрос изменения записи.",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v1UpdateSecretRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SecretsService"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v1AuthResponse": {
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "description": "token - токен доступа для метаданных authorization: Bearer \u003ctoken\u003e."
+        },
+        "expiresAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "expires_at - момент истечения токена."
+        },
+        "kdfSalt": {
+          "type": "string",
+          "format": "byte",
+          "description": "kdf_salt - соль вывода ключа шифрования, заданная при регистрации."
+        }
+      },
+      "description": "AuthResponse - результат регистрации или входа."
+    },
+    "v1CreateSecretRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id - идентификатор новой записи (UUID)."
+        },
+        "type": {
+          "$ref": "#/definitions/v1SecretType",
+          "description": "type - тип записи."
+        },
+        "encryptedPayload": {
+          "type": "string",
+          "format": "byte",
+          "description": "encrypted_payload - шифротекст содержимого записи."
+        }
+      },
+      "description": "CreateSecretRequest - запрос создания записи."
+    },
+    "v1DeleteSecretRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id - идентификатор записи."
+        },
+        "expectedVersion": {
+          "type": "string",
+          "format": "int64",
+          "description": "expected_version - версия записи, которую клиент считает актуальной."
+        }
+      },
+      "description": "DeleteSecretRequest - запрос удаления записи."
+    },
+    "v1GetSecretRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id - идентификатор записи."
+        }
+      },
+      "description": "GetSecretRequest - запрос записи по идентификатору."
+    },
+    "v1LoginRequest": {
+      "type": "object",
+      "properties": {
+        "login": {
+          "type": "string",
+          "description": "login - логин пользователя."
+        },
+        "password": {
+          "type": "string",
+          "description": "password - секрет аутентификации."
+        }
+      },
+      "description": "LoginRequest - запрос аутентификации существующего пользователя."
+    },
+    "v1RegisterRequest": {
+      "type": "object",
+      "properties": {
+        "login": {
+          "type": "string",
+          "description": "login - уникальный логин пользователя."
+        },
+        "password": {
+          "type": "string",
+          "description": "password - секрет аутентификации. Сервер хранит только его хеш с солью."
+        },
+        "kdfSalt": {
+          "type": "string",
+          "format": "byte",
+          "description": "kdf_salt - соль, которую клиент использует для вывода ключа шифрования из\nмастер-пароля. Соль не секретна; сервер хранит её, чтобы отдавать другим\nклиентам владельца при входе."
+        }
+      },
+      "description": "RegisterRequest - запрос регистрации нового пользователя."
+    },
+    "v1Secret": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id - идентификатор записи (UUID), заданный клиентом."
+        },
+        "type": {
+          "$ref": "#/definitions/v1SecretType",
+          "description": "type - тип записи."
+        },
+        "encryptedPayload": {
+          "type": "string",
+          "format": "byte",
+          "description": "encrypted_payload - шифротекст (nonce и данные AES-256-GCM), внутри\nкоторого находятся название, содержимое и метаинформация записи."
+        },
+        "version": {
+          "type": "string",
+          "format": "int64",
+          "description": "version - версия записи; растёт на единицу при каждом изменении."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "updated_at - время последнего изменения на сервере."
+        }
+      },
+      "description": "Secret - зашифрованная запись пользователя."
+    },
+    "v1SecretType": {
+      "type": "string",
+      "enum": [
+        "SECRET_TYPE_UNSPECIFIED",
+        "SECRET_TYPE_LOGIN_PASSWORD",
+        "SECRET_TYPE_TEXT",
+        "SECRET_TYPE_BINARY",
+        "SECRET_TYPE_CARD"
+      ],
+      "default": "SECRET_TYPE_UNSPECIFIED",
+      "description": "SecretType определяет тип хранимой записи. Тип передаётся открыто, чтобы\nклиент мог фильтровать записи, не расшифровывая их.\n\n - SECRET_TYPE_UNSPECIFIED: SECRET_TYPE_UNSPECIFIED - тип не задан; сервер отклоняет такие записи.\n - SECRET_TYPE_LOGIN_PASSWORD: SECRET_TYPE_LOGIN_PASSWORD - пара логин/пароль.\n - SECRET_TYPE_TEXT: SECRET_TYPE_TEXT - произвольные текстовые данные.\n - SECRET_TYPE_BINARY: SECRET_TYPE_BINARY - произвольные бинарные данные.\n - SECRET_TYPE_CARD: SECRET_TYPE_CARD - данные банковской карты."
+    },
+    "v1SecretVersion": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id - идентификатор записи."
+        },
+        "version": {
+          "type": "string",
+          "format": "int64",
+          "description": "version - версия записи на клиенте."
+        }
+      },
+      "description": "SecretVersion - пара идентификатор/версия записи, известной клиенту."
+    },
+    "v1SyncRequest": {
+      "type": "object",
+      "properties": {
+        "known": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1SecretVersion"
+          },
+          "description": "known - все записи, о которых клиент знает, с их версиями."
+        }
+      },
+      "description": "SyncRequest - запрос дельты синхронизации."
+    },
+    "v1SyncResponse": {
+      "type": "object",
+      "properties": {
+        "changed": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "$ref": "#/definitions/v1Secret"
+          },
+          "description": "changed - записи, которых нет у клиента или версия которых на сервере новее."
+        },
+        "deletedIds": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "deleted_ids - идентификаторы известных клиенту записей, удалённых на сервере."
+        }
+      },
+      "description": "SyncResponse - дельта синхронизации."
+    },
+    "v1UpdateSecretRequest": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "id - идентификатор записи."
+        },
+        "type": {
+          "$ref": "#/definitions/v1SecretType",
+          "description": "type - новый тип записи."
+        },
+        "encryptedPayload": {
+          "type": "string",
+          "format": "byte",
+          "description": "encrypted_payload - новый шифротекст содержимого записи."
+        },
+        "expectedVersion": {
+          "type": "string",
+          "format": "int64",
+          "description": "expected_version - версия записи, на основе которой клиент вносил\nизменения; используется для оптимистичной блокировки."
+        }
+      },
+      "description": "UpdateSecretRequest - запрос изменения записи."
+    }
+  }
+}
