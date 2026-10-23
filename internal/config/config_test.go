@@ -150,6 +150,39 @@ func TestResolveDuration(t *testing.T) {
 	}
 }
 
+func TestLoad_Server(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "server.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+		"address": "0.0.0.0:9443",
+		"log_level": "debug",
+		"database_dsn": "postgres://db",
+		"token_key": "key",
+		"token_ttl": "2h",
+		"tls_cert": "cert.pem",
+		"tls_key": "key.pem",
+		"insecure": false
+	}`), 0o600))
+
+	var got Server
+	require.NoError(t, Load(path, &got))
+
+	require.NotNil(t, got.Address)
+	assert.Equal(t, "0.0.0.0:9443", *got.Address)
+	assert.Equal(t, "debug", *got.LogLevel)
+	assert.Equal(t, "postgres://db", *got.DatabaseDSN)
+	assert.Equal(t, "key", *got.TokenKey)
+	assert.Equal(t, 2*time.Hour, got.TokenTTL.Std())
+	assert.Equal(t, "cert.pem", *got.TLSCert)
+	assert.Equal(t, "key.pem", *got.TLSKey)
+	require.NotNil(t, got.Insecure, "явно заданный false отличается от отсутствующего ключа")
+	assert.False(t, *got.Insecure)
+
+	var empty Server
+	require.NoError(t, json.Unmarshal([]byte(`{}`), &empty))
+	assert.Nil(t, empty.Insecure)
+	assert.Nil(t, empty.TokenTTL)
+}
+
 func TestDuration_MarshalRoundTripInStruct(t *testing.T) {
 	var got struct {
 		Interval Duration `json:"interval"`

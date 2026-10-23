@@ -9,7 +9,6 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"go.uber.org/zap"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -161,9 +160,7 @@ func (s *AuthService) response(user storage.User) *pb.AuthResponse {
 // internal логирует внутреннюю ошибку и возвращает клиенту общий код
 // codes.Internal без подробностей.
 func (s *AuthService) internal(action string, err error) error {
-	s.log.Error("ошибка сервиса аутентификации", zap.String("действие", action), zap.Error(err))
-
-	return status.Error(codes.Internal, "внутренняя ошибка сервера")
+	return internalError(s.log, "auth", action, err)
 }
 
 // validateLogin проверяет длину логина и отсутствие пробельных и управляющих символов.
