@@ -405,3 +405,38 @@ func TestNormalizeID(t *testing.T) {
 	assert.Equal(t, "abc-def", normalizeID("  ABC-DEF\n"))
 	assert.Empty(t, normalizeID("   "))
 }
+
+func TestClient_WithoutKeys(t *testing.T) {
+	srv := newServerSide(t)
+	d := freshDevice(t, srv)
+
+	id, err := d.client.Add(loginEntry("n"))
+	require.NoError(t, err)
+
+	keyless := New(d.remote, d.cache, nil)
+
+	t.Run("операциям с шифрованием нужен ключ", func(t *testing.T) {
+		_, err := keyless.Add(loginEntry("x"))
+		require.ErrorIs(t, err, ErrNoKeys)
+
+		require.ErrorIs(t, keyless.Edit(model.Entry{ID: id, Kind: model.KindText, Name: "n", Text: "t"}), ErrNoKeys)
+
+		_, err = keyless.Get(id)
+		require.ErrorIs(t, err, ErrNoKeys)
+
+		_, err = keyless.List()
+		require.ErrorIs(t, err, ErrNoKeys)
+	})
+
+	t.Run("синхронизация и удаление работают без ключа", func(t *testing.T) {
+		res, err := keyless.Sync(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, 1, res.Pushed)
+
+		require.NoError(t, keyless.Remove(id))
+
+		res, err = keyless.Sync(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, 1, res.Pushed)
+	})
+}

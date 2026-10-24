@@ -12,7 +12,22 @@ PROTOC ?= $(HOME)/.local/protoc/bin/protoc
 PROTOC_INCLUDE ?= $(HOME)/.local/protoc/include
 PROTO_PLUGINS ?= $(HOME)/go/bin
 
-.PHONY: all fmt vet lint test cover tidy proto
+# Сборка клиента: версия, дата и коммит передаются в бинарный файл через
+# -ldflags и выводятся командой gophkeeper version. Версию можно задать явно:
+# make build-client VERSION=1.0.0
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+DATE ?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+BIN_DIR ?= bin
+LDFLAGS = -s -w \
+	-X main.buildVersion=$(VERSION) \
+	-X main.buildDate=$(DATE) \
+	-X main.buildCommit=$(COMMIT)
+
+# Платформы, под которые собирается клиент: ОС/архитектура.
+CLIENT_PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
+
+.PHONY: all fmt vet lint test cover tidy proto build-server build-client build-client-all
 
 all: fmt vet lint test
 
@@ -57,3 +72,21 @@ proto:
 		--openapiv2_out=api/swagger \
 		--openapiv2_opt=generate_unbound_methods=true,allow_merge=true,merge_file_name=gophkeeper \
 		api/proto/gophkeeper.proto
+
+## build-server: собирает сервер для текущей платформы в $(BIN_DIR)/server
+build-server:
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/server ./cmd/server
+
+## build-client: собирает клиент для текущей платформы в $(BIN_DIR)/gophkeeper
+build-client:
+	CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/gophkeeper ./cmd/client
+
+## build-client-all: кросс-сборка клиента для Linux, macOS и Windows (см. CLIENT_PLATFORMS)
+build-client-all:
+	@for platform in $(CLIENT_PLATFORMS); do \
+		os=$${platform%/*}; arch=$${platform#*/}; \
+		ext=""; [ "$$os" = "windows" ] && ext=".exe"; \
+		out="$(BIN_DIR)/gophkeeper-$$os-$$arch$$ext"; \
+		echo "$(GO) build $$out"; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" -o "$$out" ./cmd/client || exit 1; \
+	done

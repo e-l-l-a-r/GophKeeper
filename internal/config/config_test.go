@@ -183,6 +183,29 @@ func TestLoad_Server(t *testing.T) {
 	assert.Nil(t, empty.TokenTTL)
 }
 
+func TestLoad_Client(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "client.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{
+		"server": "example.com:8443",
+		"ca_file": "/etc/ca.pem",
+		"dir": "/tmp/gk",
+		"insecure": true
+	}`), 0o600))
+
+	var got Client
+	require.NoError(t, Load(path, &got))
+
+	assert.Equal(t, "example.com:8443", *got.Server)
+	assert.Equal(t, "/etc/ca.pem", *got.CAFile)
+	assert.Equal(t, "/tmp/gk", *got.Dir)
+	assert.True(t, *got.Insecure)
+
+	var empty Client
+	require.NoError(t, json.Unmarshal([]byte(`{}`), &empty))
+	assert.Nil(t, empty.Server)
+	assert.Nil(t, empty.Insecure)
+}
+
 func TestDuration_MarshalRoundTripInStruct(t *testing.T) {
 	var got struct {
 		Interval Duration `json:"interval"`

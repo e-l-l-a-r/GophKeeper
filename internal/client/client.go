@@ -41,8 +41,14 @@ type Summary struct {
 	Kind model.Kind
 }
 
+// ErrNoKeys возвращается операциями, которым нужен мастер-ключ (Add, Edit,
+// Get, List), если клиент создан без связки ключей.
+var ErrNoKeys = errors.New("мастер-ключ не задан")
+
 // New создаёт клиента, работающего с сервером remote, кешем cache и
-// мастер-ключами keys.
+// мастер-ключами keys. Операции, которые не расшифровывают записи (Remove,
+// Sync, Resolve), работают и с keys == nil: мастер-пароль им не нужен. Add,
+// Edit, Get и List без ключей возвращают ErrNoKeys.
 func New(remote Remote, cache *localstore.Cache, keys *crypto.Keyring) *Client {
 	return &Client{remote: remote, cache: cache, keys: keys, now: time.Now}
 }
@@ -190,6 +196,10 @@ func (c *Client) List() ([]Summary, error) {
 // seal проверяет, сериализует и шифрует запись. Возвращает ошибку, если
 // зашифрованная запись не уместится в лимит сервера.
 func (c *Client) seal(entry model.Entry) ([]byte, error) {
+	if c.keys == nil {
+		return nil, ErrNoKeys
+	}
+
 	data, err := entry.Marshal()
 	if err != nil {
 		return nil, err
@@ -210,6 +220,10 @@ func (c *Client) seal(entry model.Entry) ([]byte, error) {
 
 // open расшифровывает запись кеша.
 func (c *Client) open(rec localstore.Record) (model.Entry, error) {
+	if c.keys == nil {
+		return model.Entry{}, ErrNoKeys
+	}
+
 	data, err := c.keys.Decrypt(rec.Payload)
 	if err != nil {
 		return model.Entry{}, fmt.Errorf("запись %s: %w", rec.ID, err)
@@ -223,6 +237,9 @@ func (c *Client) open(rec localstore.Record) (model.Entry, error) {
 // ошибочно введённого мастер-пароля: сервер проверить пароль не может. Если в
 // кеше нет записей с содержимым, проверять нечем и проверка пропускается.
 func (c *Client) verifyKey() error {
+	if c.keys == nil {
+		return ErrNoKeys
+	}
 	if c.verified {
 		return nil
 	}
